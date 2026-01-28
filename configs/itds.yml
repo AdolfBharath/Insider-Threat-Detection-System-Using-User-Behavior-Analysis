@@ -1,0 +1,50 @@
+project:
+  name: Insider Threat Detection System (ITDS)
+  org_size: small-to-medium
+
+paths:
+  sqlite_db: data/out/itds.sqlite
+  normalized_jsonl: data/out/normalized.jsonl
+
+ingestion:
+  mode: batch   # batch | tail
+  sources:
+    - name: linux_auth
+      type: file
+      format: linux_auth
+      path: data/sample_logs/linux/auth.log
+    - name: app_access
+      type: file
+      format: app_access
+      path: data/sample_logs/app/app_access.log
+
+baseline:
+  window_days: 7
+  min_events: 30
+
+rules:
+  working_hours:
+    start: "09:00"
+    end: "18:00"
+  large_data_threshold_mb: 200
+  deny_burst_threshold: 10
+  new_resource_weight: 15
+  new_ip_weight: 20
+  after_hours_weight: 10
+  privilege_escalation_weight: 30
+  deny_burst_weight: 25
+  large_download_weight: 35
+
+anomaly:
+  # simple, explainable statistics
+  zscore_threshold: 3.0
+  ewma_alpha: 0.3
+
+risk:
+  decay_half_life_hours: 24
+  threshold_high: 70
+  threshold_medium: 45
+
+alerting:
+  sink: console   # console | json
+  json_out: data/out/alerts.jsonl

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ITDS Dashboard — Alerts & User Risk</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,0.04);
+      --panel2: rgba(255,255,255,0.06);
+      --text: #eaf0ff;
+      --muted: #a9b7d0;
+      --border: rgba(255,255,255,0.10);
+      --shadow: 0 14px 35px rgba(0,0,0,0.35);
+      --hi: #ff5d73;
+      --med: #ffd166;
+      --ok: #2ecc71;
+      --accent: #7aa2ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 700px at 20% -10%, rgba(122,162,255,0.18), transparent 60%),
+                  radial-gradient(900px 600px at 90% 0%, rgba(255,93,115,0.10), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      background: rgba(11,16,32,0.72);
+    }
+
+    .headerRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    header h1 { margin: 0; font-size: 16px; letter-spacing: 0.2px; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+
+    main { display: grid; grid-template-columns: 1fr 420px; gap: 14px; padding: 14px; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    button {
+      background: rgba(122,162,255,0.12);
+      color: var(--text);
+      border: 1px solid rgba(122,162,255,0.35);
+      padding: 9px 11px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease, background 120ms ease;
+    }
+    button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    button.secondary { background: rgba(255,255,255,0.06); border-color: var(--border); }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+    }
+    .pill.high { border-color: rgba(255,93,115,.55); color: var(--hi); }
+    .pill.medium { border-color: rgba(255,209,102,.55); color: var(--med); }
+    .pill.low { border-color: rgba(46,204,113,.55); color: var(--ok); }
+
+    .kpiGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .kpi { padding: 10px; border: 1px solid var(--border); background: var(--panel2); border-radius: 12px; }
+    .kpi .label { color: var(--muted); font-size: 12px; }
+    .kpi .value { margin-top: 6px; font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px 8px; font-size: 13px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    tr { transition: background 120ms ease; }
+    tr:hover { background: rgba(255,255,255,0.04); }
+    tr.selected { outline: 1px solid rgba(122,162,255,0.45); background: rgba(122,162,255,0.10); }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: #d8e3ff; }
+    .muted { color: var(--muted); }
+
+    .panelTitle { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
+    .subtle { font-size: 12px; color: var(--muted); }
+    .scroll { max-height: 620px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.28); border: 1px solid var(--border); padding: 10px; border-radius: 12px; max-height: 420px; overflow: auto; }
+
+    .empty {
+      padding: 12px;
+      border: 1px dashed rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="headerRow">
+      <div>
+        <h1>ITDS Dashboard</h1>
+        <p>Alerts, summary, and explainable evidence.</p>
+      </div>
+      <div class="row">
+        <button id="btnTryFetch">Refresh</button>
+        <button id="btnClear" class="secondary">Clear</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+        <div>
+          <h2 class="panelTitle">Alerts</h2>
+          <div class="subtle">Click an alert to view details.</div>
+        </div>
+        <div class="subtle" id="lastUpdated"></div>
+      </div>
+      <div class="scroll">
+        <table id="alertsTable">
+          <thead>
+            <tr>
+              <th style="width: 170px;">Time</th>
+              <th>User</th>
+              <th style="width: 90px;">Level</th>
+              <th style="width: 80px;">Score</th>
+              <th>Top reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="5"><div class="empty">No alerts loaded yet.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="panelTitle">Summary</h2>
+      <div class="kpiGrid" style="margin-bottom: 12px;">
+        <div class="kpi">
+          <div class="label">Total alerts</div>
+          <div class="value" id="kpiTotal">—</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Users flagged</div>
+          <div class="value" id="kpiUsers">—</div>
+        </div>
+        <div class="kpi">
+          <div class="label">High</div>
+          <div class="value" id="kpiHigh">—</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Medium</div>
+          <div class="value" id="kpiMed">—</div>
+        </div>
+      </div>
+
+      <h2 class="panelTitle" style="margin-top: 4px;">Selected alert</h2>
+      <div id="selectedMeta" class="empty" style="margin-bottom: 10px;">Select an alert to see evidence and explanations.</div>
+      <pre id="alertDetails" class="mono">(no alert selected)</pre>
+    </section>
+  </main>
+
+<script>
+  function parseJsonl(text) {
+    const out = [];
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try { out.push(JSON.parse(trimmed)); }
+      catch (e) { /* ignore bad lines */ }
+    }
+    return out;
+  }
+
+  function levelToClass(level) {
+    if (level === 'high') return 'high';
+    if (level === 'medium') return 'medium';
+    return 'low';
+  }
+
+  function renderAlerts(alerts) {
+    const tbody = document.querySelector('#alertsTable tbody');
+    tbody.innerHTML = '';
+
+    alerts.sort((a,b) => (b.ts || '').localeCompare(a.ts || ''));
+
+    if (!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No alerts found in the output yet.</div></td></tr>';
+      return;
+    }
+
+    for (const a of alerts) {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.onclick = () => {
+        for (const r of tbody.querySelectorAll('tr')) r.classList.remove('selected');
+        tr.classList.add('selected');
+        document.getElementById('alertDetails').textContent = JSON.stringify(a, null, 2);
+
+        const reasons = (a.explanations && a.explanations.length) ? a.explanations : [];
+        const top3 = reasons.slice(0, 3).map(x => `${x.name} (w=${x.weight})`).join(' · ');
+        document.getElementById('selectedMeta').innerHTML = `
+          <div class="row" style="justify-content: space-between;">
+            <div><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></div>
+            <div class="mono">score=${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</div>
+          </div>
+          <div style="margin-top:8px;" class="subtle"><span class="mono">${(a.ts || '').replace('T',' ').replace('Z','')}</span> · user=<span class="mono">${a.user || 'unknown'}</span></div>
+          <div style="margin-top:8px;" class="subtle">${top3 || 'No explanations.'}</div>
+        `;
+      };
+
+      const topWhy = (a.explanations && a.explanations.length)
+        ? `${a.explanations[0].name} (w=${a.explanations[0].weight})`
+        : '(no explanations)';
+
+      tr.innerHTML = `
+        <td class="mono">${(a.ts || '').replace('T', ' ').replace('Z','')}</td>
+        <td>${a.user || 'unknown'}</td>
+        <td><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></td>
+        <td class="mono">${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</td>
+        <td class="muted">${topWhy}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderSummary(alerts) {
+    const total = alerts.length;
+    const high = alerts.filter(a => a.level === 'high').length;
+    const med = alerts.filter(a => a.level === 'medium').length;
+    const users = new Set(alerts.map(a => a.user || 'unknown')).size;
+
+    document.getElementById('kpiTotal').textContent = String(total);
+    document.getElementById('kpiUsers').textContent = String(users);
+    document.getElementById('kpiHigh').textContent = String(high);
+    document.getElementById('kpiMed').textContent = String(med);
+  }
+
+  async function readFileAsText(file) {
+    return await file.text();
+  }
+
+  async function tryFetch() {
+    // Works when served from a local HTTP server.
+    const alertsResp = await fetch('../data/out/alerts.jsonl');
+    if (!alertsResp.ok) throw new Error('Could not load alerts output.');
+    const alerts = parseJsonl(await alertsResp.text());
+
+    renderAlerts(alerts);
+    renderSummary(alerts);
+
+    const now = new Date();
+    document.getElementById('lastUpdated').textContent = `Last updated: ${now.toLocaleString()}`;
+  }
+
+  document.getElementById('btnTryFetch').onclick = () => tryFetch().catch(e => alert(e.message));
+  document.getElementById('btnClear').onclick = () => {
+    document.querySelector('#alertsTable tbody').innerHTML = '';
+    document.getElementById('alertDetails').textContent = '(no alert selected)';
+    document.getElementById('selectedMeta').textContent = 'Select an alert to see evidence and explanations.';
+    document.getElementById('kpiTotal').textContent = '—';
+    document.getElementById('kpiUsers').textContent = '—';
+    document.getElementById('kpiHigh').textContent = '—';
+    document.getElementById('kpiMed').textContent = '—';
+    document.getElementById('lastUpdated').textContent = '';
+  };
+
+  // Auto-load on open.
+  tryFetch().catch(e => {
+    document.querySelector('#alertsTable tbody').innerHTML = `
+      <tr><td colspan="5"><div class="empty">No output loaded yet. If alerts exist, click Refresh.</div></td></tr>
+    `;
+    document.getElementById('selectedMeta').textContent = 'Waiting for alerts output.';
+  });
+</script>
+</body>
+</html>

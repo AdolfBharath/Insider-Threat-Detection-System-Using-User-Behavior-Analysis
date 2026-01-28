@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+
+# Build / OS
+.DS_Store
+Thumbs.db
+
+# Outputs (keep folder via .gitkeep)
+data/out/*
+!data/out/.gitkeep
+
+# Local SQLite/JSONL artifacts elsewhere
+*.sqlite
+*.jsonl

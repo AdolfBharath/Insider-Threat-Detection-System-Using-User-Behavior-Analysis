@@ -1,0 +1,7 @@
+Jan 27 10:05:12 host1 sshd[1011]: Accepted password for alice from 10.0.0.10 port 51122 ssh2
+Jan 27 10:07:44 host1 sudo:    alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/apt install nginx
+Jan 27 19:42:01 host1 sshd[2091]: Accepted password for alice from 10.0.0.10 port 61221 ssh2
+Jan 27 19:43:10 host1 sudo:    alice : TTY=pts/1 ; PWD=/home/alice ; USER=root ; COMMAND=/bin/cat /etc/shadow
+Jan 27 11:12:04 host1 sshd[1201]: Failed password for invalid user admin from 10.0.0.99 port 42311 ssh2
+Jan 27 11:12:07 host1 sshd[1201]: Failed password for invalid user admin from 10.0.0.99 port 42311 ssh2
+Jan 27 11:12:10 host1 sshd[1201]: Failed password for invalid user admin from 10.0.0.99 port 42311 ssh2

@@ -1,0 +1,77 @@
+project:
+  name: itds
+  timezone: "UTC"   # keep demo deterministic
+
+paths:
+  output_dir: "data/out"
+  sqlite_path: "data/out/itds.sqlite"
+  normalized_jsonl: "data/out/events.normalized.jsonl"
+  alerts_jsonl: "data/out/alerts.jsonl"
+
+ingestion:
+  mode_default: "batch"  # batch|tail
+  batch:
+    # For demo: read all *.log under this folder
+    glob_patterns:
+      - "data/sample_logs/**/*.log"
+
+# Sources are used for labeling + selecting parsers.
+# In real deployment, point these to /var/log/... etc.
+log_sources:
+  - name: "linux_auth"
+    kind: "file"
+    parser: "linux_auth"
+    enabled: true
+
+  - name: "linux_sudo"
+    kind: "file"
+    parser: "linux_sudo"
+    enabled: true
+
+  - name: "app_access"
+    kind: "file"
+    parser: "app_access"
+    enabled: true
+
+baseline:
+  # Rolling window parameters (in hours) for rate baselines.
+  window_hours: 168   # 7 days
+  min_events_to_learn: 30
+
+risk:
+  decay_half_life_minutes: 240   # risk fades if behavior returns normal
+  thresholds:
+    medium: 50
+    high: 75
+
+weights:
+  # Rule contributions (0-100ish scale before decay)
+  rules:
+    access_outside_work_hours: 20
+    new_resource_for_user: 15
+    repeated_denied_access: 25
+    privilege_escalation: 30
+    bulk_download: 35
+    impossible_travel_like_ip_change: 20
+
+  # Anomaly contributions
+  anomalies:
+    rate_spike_per_hour: 25
+    time_of_day_deviation: 20
+
+rules:
+  work_hours:
+    start_hour: 9
+    end_hour: 18
+
+  denied_access:
+    window_minutes: 15
+    count_threshold: 5
+
+  bulk_download:
+    window_minutes: 30
+    bytes_threshold: 200000000   # 200 MB
+
+  ip_change:
+    window_minutes: 60
+    distinct_ip_threshold: 2
