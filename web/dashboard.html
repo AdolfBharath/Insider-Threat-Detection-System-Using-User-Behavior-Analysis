@@ -188,6 +188,15 @@
   </main>
 
 <script>
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
   function parseJsonl(text) {
     const out = [];
     for (const line of text.split(/\r?\n/)) {
@@ -225,19 +234,21 @@
         document.getElementById('alertDetails').textContent = JSON.stringify(a, null, 2);
 
         const reasons = (a.explanations && a.explanations.length) ? a.explanations : [];
-        const top3 = reasons.slice(0, 3).map(x => `${x.name} (w=${x.weight})`).join(' · ');
+        const topReason = reasons.length
+          ? (reasons[0]?.evidence?.reason_short || reasons[0]?.evidence?.reason || reasons[0].name)
+          : '';
         document.getElementById('selectedMeta').innerHTML = `
           <div class="row" style="justify-content: space-between;">
             <div><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></div>
             <div class="mono">score=${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</div>
           </div>
           <div style="margin-top:8px;" class="subtle"><span class="mono">${(a.ts || '').replace('T',' ').replace('Z','')}</span> · user=<span class="mono">${a.user || 'unknown'}</span></div>
-          <div style="margin-top:8px;" class="subtle">${top3 || 'No explanations.'}</div>
+          <div style="margin-top:8px;" class="subtle"><b>Why:</b> ${escapeHtml(topReason || 'No explanations.')}</div>
         `;
       };
 
       const topWhy = (a.explanations && a.explanations.length)
-        ? `${a.explanations[0].name} (w=${a.explanations[0].weight})`
+        ? (a.explanations[0]?.evidence?.reason_short || a.explanations[0]?.evidence?.reason || a.explanations[0].name)
         : '(no explanations)';
 
       tr.innerHTML = `
@@ -245,7 +256,7 @@
         <td>${a.user || 'unknown'}</td>
         <td><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></td>
         <td class="mono">${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</td>
-        <td class="muted">${topWhy}</td>
+        <td class="muted">${escapeHtml(topWhy)}</td>
       `;
       tbody.appendChild(tr);
     }

@@ -12,3 +12,11 @@
 2026-01-27T11:30:16Z user=bob action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.20 status=403
 2026-01-27T11:30:18Z user=bob action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.20 status=403
 2026-01-27T11:30:20Z user=bob action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.20 status=403
+2026-01-27T02:15:10Z user=charlie action=view resource=/engineering/designs.zip bytes=5242880 ip=10.0.0.77 status=200
+2026-01-27T02:16:00Z user=charlie action=download resource=/db_exports/payroll.csv bytes=419430400 ip=10.0.0.77 status=200
+2026-01-27T14:20:10Z user=diana action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.88 status=200
+2026-01-27T14:22:10Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
+2026-01-27T14:22:12Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
+2026-01-27T14:22:14Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
+2026-01-27T14:22:16Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
+2026-01-27T21:05:10Z user=diana action=download resource=/db_exports/customers.csv bytes=314572800 ip=10.0.0.88 status=200

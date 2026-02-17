@@ -2,7 +2,7 @@
 
 A lightweight, explainable, demo-ready insider threat detection system for **small/medium organizations**.
 
-This project monitors **post-login user activity** by ingesting host/app logs, normalizing events, building per-user behavior baselines, scoring anomalies + rules, and generating **transparent alerts**.
+This project monitors **post-login user activity** by ingesting host/app logs, normalizing events, building **per-user behavior sequences**, scoring with an **unsupervised LSTM Autoencoder**, and generating **transparent alerts**.
 
 ## Quick Demo (Windows-friendly)
 
@@ -39,7 +39,7 @@ Outputs:
 - Normalized events JSONL: `data/out/normalized.jsonl`
 
 ## What This Repo Contains
-- `itds/` Implementation modules (collector, parser, baseline, scoring, alerts)
+- `itds/` Implementation modules (collector, parser, normalization, LSTM-AE scoring, alerts)
 - `configs/` Runtime configuration (sources, thresholds, weights)
 - `data/sample_logs/` Sample Linux + application logs for demo
 - `docs/` Architecture + viva-ready project blueprint

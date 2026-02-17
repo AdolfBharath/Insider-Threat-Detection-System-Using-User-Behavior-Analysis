@@ -25,4 +25,12 @@ class AlertSink:
         # console: human-readable, explainable
         print(f"[bold red]ALERT[/bold red] level={alert['level']} score={alert['score']} user={alert['user']} ts={alert['ts']}")
         for ex in alert.get("explanations", []):
-            print(f"  - ({ex['kind']}) {ex['name']} weight={ex['weight']} evidence={ex['evidence']}")
+            evidence = ex.get("evidence") or {}
+            if ex.get("kind") == "dl" and isinstance(evidence, dict) and evidence.get("reason"):
+                short = evidence.get("reason_short")
+                if short:
+                    print(f"  - (dl) {short}")
+                else:
+                    print(f"  - (dl) {evidence['reason']}")
+            else:
+                print(f"  - ({ex['kind']}) {ex['name']} weight={ex['weight']} evidence={evidence}")
