@@ -6,7 +6,7 @@ Small/medium organizations often lack a SOC/enterprise SIEM, yet face insider ri
 - A staff member abuses admin tools after login (sudo, sensitive file reads).
 - Credential-sharing causes access from new IPs or unusual times.
 
-**Goal:** Detect suspicious *post-login* behaviors from logs using **transparent rules + simple statistics** (no deep learning, no paid tools).
+**Goal:** Detect suspicious *post-login* behaviors from logs using a **single unsupervised deep-learning model** (LSTM Autoencoder) and produce **human-readable reasons** for each alert.
 
 ---
 
@@ -18,15 +18,13 @@ Small/medium organizations often lack a SOC/enterprise SIEM, yet face insider ri
 3. **Parser(s)**: source-specific extraction (auth.log, app access).
 4. **Normalizer**: maps parsed fields → one unified JSON schema.
 5. **Storage**: SQLite tables for events + baseline memory (first-seen IP/resource).
-6. **Behavior Baseline**: rolling “normal” behavior per user.
-7. **Detector**:
-   - **Rule Engine**: deterministic, explainable triggers.
-   - **Anomaly Checks**: z-score spike checks on event rates.
-8. **Risk Scoring**: weighted aggregation + decay.
-9. **Alert Sink**: console output (and optional JSONL file).
+6. **Feature + Sequence Builder**: converts normalized events into per-user sliding windows.
+7. **Detector (single model)**: **Unsupervised LSTM Autoencoder** → reconstruction error.
+8. **Thresholding + Risk**: thresholds from training percentiles + simple risk aggregation.
+9. **Alert Sink**: console output + JSONL for the dashboard.
 
 ### Data flow (pipeline)
-Raw log line → Collector → Parser → Normalizer → SQLite → Baseline Update → Detection → Risk Score → Alert
+Raw log line → Collector → Parser → Normalizer → SQLite → Feature vectors → Per-user sequences → LSTM-AE reconstruction error → Threshold → Risk → Alert
 
 ---
 
@@ -63,23 +61,21 @@ Normalized JSON fields:
 
 ## 5) Behavior analysis logic
 
-### A) Rule-based detection (explainable)
-Rules implemented (weights configurable in `configs/itds.yml`):
-1. **After-hours activity**: event timestamp outside working hours.
-2. **Sensitive sudo**: sudo command touches sensitive targets (e.g., `/etc/shadow`).
-3. **Large download**: download bytes ≥ threshold.
-4. **Deny burst**: too many denied actions in 10 minutes (possible probing).
-5. **New IP / new resource**: first-seen IP/resource for that user.
+### A) Feature engineering (explainable inputs)
+Each normalized event is converted into a numeric vector that mixes:
+- one-hot: `action:*`, `resource:*`
+- numeric (robust-scaled): `bytes_log`, `success`, `privilege`, `hour_sin`, `hour_cos`
 
-Each rule emits: `name`, `weight`, and `evidence`.
+### B) Sequence modeling (single unsupervised model)
+For each user, build sequences using a sliding window:
+- `seq_len`: number of events in a window
+- `stride`: step size
 
-### B) Simple anomaly detection (transparent)
-- **Spike in activity** (per user):
-  - Compute `rate_60m` = events in last 60 minutes.
-  - Estimate typical `mean/std` from last 7 days hourly buckets.
-  - If z-score $z = (rate_60m - mean) / std$ exceeds threshold → anomaly.
+Train an **LSTM Autoencoder** on early sequences (assumed normal). At inference time:
+- reconstruct each sequence
+- compute reconstruction error (MSE)
 
-This is explainable (shows `rate_60m`, `mean`, `std`, and `z`).
+Large reconstruction error means the sequence deviates from learned “normal”.
 
 ---
 
@@ -96,22 +92,25 @@ Let findings be $f_i$ with weights $w_i$.
 - `medium` if score ≥ 45
 - else `low` (no alert)
 
-**Explainability:** alert includes the exact findings (rules/anomalies) and evidence.
+**Explainability:** alerts include short human tags plus detailed evidence.
 
 ---
 
 ## 7) Alert generation logic (not black-box)
-Alert is generated when:
-- risk level is `medium` or `high`.
+An alert is generated when either:
+- sequence reconstruction error exceeds the learned threshold (medium/high), OR
+- user risk crosses `threshold_medium` / `threshold_high`.
 
 Alert includes:
 - `user`, `ts`, `score`, `level`
-- the triggering event
-- a list of explanations:
-  - kind: `rule` or `anomaly`
-  - name: `large_download`, `new_ip_first_seen`, etc.
-  - weight
-  - evidence (bytes, ip, command, deny_count_10m, z-score…)
+- `event`: sequence metadata (`seq_start`, `seq_end`, `seq_len`, `anomaly_score`, thresholds)
+- `explanations` with:
+  - `kind: dl`
+  - `name: lstm_autoencoder_reconstruction_error`
+  - `evidence.reason_short`: short tags (example: `After-hours + sudo + large download`)
+  - `evidence.reason`: detailed readable reason (threshold exceeded + drivers + top event)
+  - `top_features`: most contributing features
+  - `top_events`: most contributing events within the sequence
 
 ---
 
@@ -123,7 +122,11 @@ Alert includes:
 - **python-dateutil** (timestamp parsing)
 - **rich** (clean alert output)
 
-No enterprise SIEM, no deep learning, no paid components.
+Deep learning (single model):
+- **TensorFlow/Keras** (LSTM Autoencoder)
+- **NumPy** (arrays)
+
+No enterprise SIEM, no paid components.
 
 ---
 
@@ -150,6 +153,11 @@ insider threat/
       detector.py
     alerting/
       sink.py
+    ml/
+      feature_engineering.py
+      sequence_builder.py
+      lstm_autoencoder.py
+      pipeline.py
     utils/
       config.py
   configs/
@@ -181,37 +189,21 @@ for each line in log_file:
      emit {user, ts, action, resource, bytes, ip, status}
 ```
 
-### B) Baseline creation
+### B) Build sequences + score with LSTM-AE
 ```
-for each normalized event e:
-  remember first-seen sets:
-     if e.ip: add to set(user_ips)
-     if e.resource: add to set(user_resources)
-  (optional) update daily counters per user
-```
+events = normalize(all_raw_logs)
+vectors = event_to_vector(events)
 
-### C) Anomaly detection (z-score spike)
-```
-rate_60m = count(events for user in last 60 minutes)
-counts_by_hour = [count events for each hour bucket in last 7 days]
-mean = avg(counts_by_hour)
-std = stdev(counts_by_hour)
-if std > 0:
-   z = (rate_60m - mean) / std
-   if z >= z_threshold: flag anomaly with evidence
-```
+seqs = sliding_windows_per_user(events, vectors, seq_len, stride)
+model = train_lstm_autoencoder(early_seqs)
 
-### D) Alert generation
-```
-findings = []
-for each rule:
-  if condition(e): findings.append({rule_name, weight, evidence})
-for each anomaly:
-  if abnormal: findings.append({anomaly_name, weight, evidence})
-score = sum(weights)
-score = score * decay(age)
-if score >= medium_threshold:
-   emit alert(level, score, explanations=findings)
+for each seq in seqs:
+  recon = model(seq)
+  err = mse(seq, recon)
+  if err >= t_high or risk >= high_threshold:
+    emit HIGH alert
+  elif err >= t_medium or risk >= medium_threshold:
+    emit MEDIUM alert
 ```
 
 ---
@@ -223,26 +215,23 @@ if score >= medium_threshold:
 4. Parse each line → structured dict.
 5. Normalize to unified schema (validated).
 6. Store normalized + raw in SQLite.
-7. Update baseline memory (first-seen IP/resource).
-8. Run rules + anomaly checks.
-9. Compute risk score + level.
-10. If medium/high → output alert with explanations.
+7. Convert normalized events into feature vectors.
+8. Build per-user sequences (sliding windows).
+9. Train/load the LSTM Autoencoder + thresholds.
+10. Score sequences, compute risk, emit alerts with `reason_short` and detailed evidence.
 
 ---
 
 ## 12) Limitations (honest, reasonable)
-- Baselines are simple; may need more days of data for stable statistics.
+- The demo model is trained on bundled sample logs; real deployments need more history.
 - Limited parsers (demo covers linux auth + app access). Adding auditd/Windows requires extra parsing.
-- Activity-rate anomaly is coarse; it won’t catch low-and-slow exfiltration reliably.
+- Thresholds are percentile-based; tuning may be needed to control alert volume.
 - SQLite is fine for SMB/demo; not intended for high-volume enterprise ingestion.
 
 ---
 
 ## 13) Future enhancements (AI/ML upgrades without deep learning)
-- Add feature vectors per user/day and use:
-  - Isolation Forest (sklearn) for multivariate anomaly detection.
-  - One-Class SVM for user-specific profiles.
-- Add sequence-based rules (Markov chain on actions) for explainable transition anomalies.
-- Add role-based baselines (compare against peers in same department).
-- Add lightweight dashboard (Flask) for alerts + timelines.
+- Add role/peer baselines (compare against similar users).
+- Add model retraining schedule (daily/weekly) with drift checks.
 - Add log tailing service + systemd unit for real deployment.
+- Add richer explainability: per-feature per-timestep contributions.

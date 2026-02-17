@@ -20,9 +20,14 @@ pip install -r requirements.txt
 python -m itds --config .\configs\itds.yml
 ```
 
+What you get:
+- Alerts: `data/out/alerts.jsonl`
+- Normalized events: `data/out/normalized.jsonl`
+- SQLite DB: `data/out/itds.sqlite`
+
 ## View output in a webpage (Dashboard)
 
-Option A (recommended): serve locally and auto-load `data/out/*`:
+Serve the repo locally and the dashboard will auto-load `data/out/alerts.jsonl`:
 
 ```powershell
 python -m http.server 8000
@@ -31,12 +36,12 @@ python -m http.server 8000
 Open:
 - `http://localhost:8000/web/dashboard.html`
 
-Option B: open `web/dashboard.html` and upload `data/out/alerts.jsonl` manually.
+Tip: click **Refresh** to reload the latest output.
 
-Outputs:
-- SQLite DB: `data/out/itds.sqlite`
-- Alerts JSONL: `data/out/alerts.jsonl`
-- Normalized events JSONL: `data/out/normalized.jsonl`
+## How to read "Top reason"
+Each alert includes two human-readable explanations:
+- `reason_short`: short tags (example: `After-hours + sudo + large download`)
+- `reason`: detailed explanation (threshold exceeded + main drivers + top event)
 
 ## What This Repo Contains
 - `itds/` Implementation modules (collector, parser, normalization, LSTM-AE scoring, alerts)
