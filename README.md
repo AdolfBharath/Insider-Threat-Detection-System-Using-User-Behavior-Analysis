@@ -4,6 +4,16 @@ A lightweight, explainable, demo-ready insider threat detection system for **sma
 
 This project monitors **post-login user activity** by ingesting host/app logs, normalizing events, building **per-user behavior sequences**, scoring with an **unsupervised LSTM Autoencoder**, and generating **transparent alerts**.
 
+## Recent Changes (Latest Update)
+
+- **Single-model ML**: kept the system to **one unsupervised deep learning model** (LSTM Autoencoder) and uses reconstruction error for anomaly scoring.
+- **Role-aware behavior modeling**: users can be mapped to roles via `configs/itds.yml`, enabling role-sensitive baselines.
+- **Adaptive thresholds**: supports adaptive, running statistics (EWMA-style) for thresholds (role/global) so alerting adjusts as behavior drifts.
+- **Risk scoring + prioritization**: alerts include a priority score and critical tags; output is sorted to surface highest-risk items first.
+- **Performance improvements**: scoring can stream from `data/out/normalized.jsonl` (reduces memory usage vs loading everything at once).
+- **Robustness**: detects feature-schema/model shape mismatches and automatically forces a retrain (also clears stale adaptive stats when needed).
+- **Dashboard UI/UX**: `web/dashboard.html` was upgraded to display **Role** and **Priority**, show critical tags, and provide a cleaner details panel.
+
 ## Quick Demo (Windows-friendly)
 
 1) Create venv + install deps:
