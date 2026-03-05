@@ -9,7 +9,7 @@ from itds.storage.sqlite import SqliteStore
 from itds.collectors.batch import BatchCollector
 from itds.normalization.normalizer import normalize_event
 from itds.alerting.sink import AlertSink
-from itds.ml.pipeline import score_sequences
+from itds.ml.pipeline import score_sequences_from_jsonl
 
 
 def run_pipeline(config_path: Path) -> None:
@@ -33,8 +33,6 @@ def run_pipeline(config_path: Path) -> None:
     collector = BatchCollector(cfg)
     alerts = AlertSink(cfg)
 
-    normalized_events: list[dict] = []
-
     for raw_event in collector.collect():
         norm = normalize_event(raw_event)
         store.insert_event(raw_event=raw_event, norm_event=norm)
@@ -43,8 +41,6 @@ def run_pipeline(config_path: Path) -> None:
         with normalized_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(norm, ensure_ascii=False) + "\n")
 
-        normalized_events.append(norm)
-
     # Unsupervised LSTM Autoencoder scoring over per-user sequences
-    for alert in score_sequences(cfg, normalized_events):
+    for alert in score_sequences_from_jsonl(cfg, normalized_path):
         alerts.emit(alert)

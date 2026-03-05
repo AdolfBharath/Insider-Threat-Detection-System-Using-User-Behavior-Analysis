@@ -25,6 +25,10 @@ lstm_ae:
   seq_len: 5
   stride: 1
 
+  # Performance / memory bounds
+  # Caps how many normalized events are kept per user when scoring from JSONL.
+  max_events_per_user: 5000
+
   # Model
   latent_dim: 32
   dropout: 0.2
@@ -39,6 +43,23 @@ lstm_ae:
   # Thresholds learned from training reconstruction errors
   t_medium_percentile: 95
   t_high_percentile: 99
+
+  # Improvement #2: adaptive thresholds (EWMA of "likely normal" errors)
+  adaptive_thresholds:
+    enabled: true
+    alpha: 0.05
+    min_count: 20
+    k_medium: 2.5
+    k_high: 3.5
+    min_std: 1.0e-6
+
+  # Improvement #4: optional periodic retraining on recent data
+  retrain:
+    enabled: false
+    every_runs: 10
+    min_sequences: 50
+    epochs: 3
+    batch_size: 64
 
   # Explainability
   explain_top_k: 3
@@ -67,8 +88,27 @@ anomaly:
 
 risk:
   decay_half_life_hours: 24
+  frequency_window_hours: 6
   threshold_high: 70
   threshold_medium: 45
+
+  # Improvement #3: category weights added to risk
+  category_weights:
+    after_hours: 5
+    sudo: 12
+    privileged: 8
+    large_download: 15
+    many_failures: 6
+
+roles:
+  # Improvement #1: role-based behavioral modeling
+  default: employee
+  list: [employee, manager, admin]
+  users:
+    alice: employee
+    bob: employee
+    charlie: manager
+    diana: admin
 
 alerting:
   sink: console   # console | json

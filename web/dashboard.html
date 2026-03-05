@@ -49,6 +49,26 @@
     header h1 { margin: 0; font-size: 16px; letter-spacing: 0.2px; }
     header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(46,204,113,.9);
+      box-shadow: 0 0 0 3px rgba(46,204,113,.15);
+    }
+
     main { display: grid; grid-template-columns: 1fr 420px; gap: 14px; padding: 14px; }
     @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
 
@@ -103,6 +123,37 @@
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: #d8e3ff; }
     .muted { color: var(--muted); }
 
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      margin-right: 6px;
+      margin-top: 6px;
+    }
+    .tag.critical {
+      border-color: rgba(255,93,115,.40);
+      background: rgba(255,93,115,.12);
+      color: #ffd6dd;
+    }
+
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    @media (max-width: 980px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr; } }
+
+    .miniCard {
+      padding: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      border-radius: 12px;
+    }
+    .miniCard .label { color: var(--muted); font-size: 11px; }
+    .miniCard .value { margin-top: 6px; font-size: 13px; font-weight: 650; }
+
     .panelTitle { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
     .subtle { font-size: 12px; color: var(--muted); }
     .scroll { max-height: 620px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
@@ -124,9 +175,13 @@
     <div class="headerRow">
       <div>
         <h1>ITDS Dashboard</h1>
-        <p>Alerts, summary, and explainable evidence.</p>
+        <p>Output-only view of alerts and explainable evidence.</p>
       </div>
       <div class="row">
+        <div class="status" title="Static dashboard: press Refresh to reload alerts.jsonl">
+          <span class="dot"></span>
+          <span id="statusText">Ready</span>
+        </div>
         <button id="btnTryFetch">Refresh</button>
         <button id="btnClear" class="secondary">Clear</button>
       </div>
@@ -148,13 +203,15 @@
             <tr>
               <th style="width: 170px;">Time</th>
               <th>User</th>
+              <th style="width: 110px;">Role</th>
               <th style="width: 90px;">Level</th>
               <th style="width: 80px;">Score</th>
+              <th style="width: 95px;">Priority</th>
               <th>Top reason</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td colspan="5"><div class="empty">No alerts loaded yet.</div></td></tr>
+            <tr><td colspan="7"><div class="empty">No alerts loaded yet.</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -208,6 +265,23 @@
     return out;
   }
 
+  function fmtTs(ts) {
+    try {
+      const d = new Date(ts);
+      if (String(d) === 'Invalid Date') return String(ts ?? '');
+      return d.toLocaleString();
+    } catch (_) {
+      return String(ts ?? '');
+    }
+  }
+
+  function getTopReason(a) {
+    const reasons = (a.explanations && a.explanations.length) ? a.explanations : [];
+    return reasons.length
+      ? (reasons[0]?.evidence?.reason_short || reasons[0]?.evidence?.reason || reasons[0].name)
+      : '';
+  }
+
   function levelToClass(level) {
     if (level === 'high') return 'high';
     if (level === 'medium') return 'medium';
@@ -218,10 +292,16 @@
     const tbody = document.querySelector('#alertsTable tbody');
     tbody.innerHTML = '';
 
-    alerts.sort((a,b) => (b.ts || '').localeCompare(a.ts || ''));
+    // Prefer triage order: priority desc, then time desc.
+    alerts.sort((a, b) => {
+      const pa = Number(a?.priority?.score ?? 0);
+      const pb = Number(b?.priority?.score ?? 0);
+      if (pb !== pa) return pb - pa;
+      return (b.ts || '').localeCompare(a.ts || '');
+    });
 
     if (!alerts.length) {
-      tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No alerts found in the output yet.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty">No alerts found in the output yet.</div></td></tr>';
       return;
     }
 
@@ -233,30 +313,46 @@
         tr.classList.add('selected');
         document.getElementById('alertDetails').textContent = JSON.stringify(a, null, 2);
 
-        const reasons = (a.explanations && a.explanations.length) ? a.explanations : [];
-        const topReason = reasons.length
-          ? (reasons[0]?.evidence?.reason_short || reasons[0]?.evidence?.reason || reasons[0].name)
-          : '';
+        const topReason = getTopReason(a);
+        const pr = Number(a?.priority?.score ?? 0);
+        const critical = Array.isArray(a?.priority?.critical) ? a.priority.critical : [];
+
         document.getElementById('selectedMeta').innerHTML = `
-          <div class="row" style="justify-content: space-between;">
-            <div><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></div>
-            <div class="mono">score=${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</div>
+          <div class="grid3">
+            <div class="miniCard"><div class="label">User</div><div class="value mono">${escapeHtml(a.user || 'unknown')}</div></div>
+            <div class="miniCard"><div class="label">Role</div><div class="value">${escapeHtml(a.role || '—')}</div></div>
+            <div class="miniCard"><div class="label">Level</div><div class="value"><span class="pill ${levelToClass(a.level)}">${escapeHtml(a.level || 'low')}</span></div></div>
+            <div class="miniCard"><div class="label">Risk score</div><div class="value">${escapeHtml(typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '—'))}</div></div>
+            <div class="miniCard"><div class="label">Priority</div><div class="value">${escapeHtml(Number.isFinite(pr) ? pr.toFixed(2) : '—')}</div></div>
+            <div class="miniCard"><div class="label">Time</div><div class="value mono">${escapeHtml(a.ts || '')}</div></div>
           </div>
-          <div style="margin-top:8px;" class="subtle"><span class="mono">${(a.ts || '').replace('T',' ').replace('Z','')}</span> · user=<span class="mono">${a.user || 'unknown'}</span></div>
-          <div style="margin-top:8px;" class="subtle"><b>Why:</b> ${escapeHtml(topReason || 'No explanations.')}</div>
+          <div class="subtle" style="margin-top:10px; line-height: 1.4;"><b>Why:</b> ${escapeHtml(topReason || 'No explanations.')}</div>
+          <div style="margin-top: 6px;">
+            ${(critical || []).map(t => `<span class="tag critical">${escapeHtml(t)}</span>`).join('')}
+          </div>
         `;
       };
 
-      const topWhy = (a.explanations && a.explanations.length)
-        ? (a.explanations[0]?.evidence?.reason_short || a.explanations[0]?.evidence?.reason || a.explanations[0].name)
-        : '(no explanations)';
+      const topWhy = getTopReason(a) || '(no explanations)';
+      const ts = fmtTs(a.ts);
+      const user = a.user || 'unknown';
+      const role = a.role || '—';
+      const level = a.level || 'low';
+      const score = (typeof a.score === 'number') ? a.score.toFixed(2) : (a.score ?? '');
+      const pr = (a?.priority?.score != null) ? Number(a.priority.score).toFixed(2) : '—';
+      const critical = Array.isArray(a?.priority?.critical) ? a.priority.critical : [];
 
       tr.innerHTML = `
-        <td class="mono">${(a.ts || '').replace('T', ' ').replace('Z','')}</td>
-        <td>${a.user || 'unknown'}</td>
-        <td><span class="pill ${levelToClass(a.level)}">${a.level || 'low'}</span></td>
-        <td class="mono">${typeof a.score === 'number' ? a.score.toFixed(2) : (a.score ?? '')}</td>
-        <td class="muted">${escapeHtml(topWhy)}</td>
+        <td class="mono">${escapeHtml(ts)}</td>
+        <td class="mono">${escapeHtml(user)}</td>
+        <td><span class="pill">${escapeHtml(role)}</span></td>
+        <td><span class="pill ${levelToClass(level)}">${escapeHtml(level)}</span></td>
+        <td class="mono">${escapeHtml(score)}</td>
+        <td class="mono">${escapeHtml(pr)}</td>
+        <td>
+          <div class="muted">${escapeHtml(topWhy)}</div>
+          <div>${(critical || []).slice(0, 3).map(t => `<span class="tag critical">${escapeHtml(t)}</span>`).join('')}</div>
+        </td>
       `;
       tbody.appendChild(tr);
     }
@@ -280,6 +376,8 @@
 
   async function tryFetch() {
     // Works when served from a local HTTP server.
+    const st = document.getElementById('statusText');
+    if (st) st.textContent = 'Loading…';
     const alertsResp = await fetch('../data/out/alerts.jsonl');
     if (!alertsResp.ok) throw new Error('Could not load alerts output.');
     const alerts = parseJsonl(await alertsResp.text());
@@ -289,6 +387,7 @@
 
     const now = new Date();
     document.getElementById('lastUpdated').textContent = `Last updated: ${now.toLocaleString()}`;
+    if (st) st.textContent = `Loaded ${alerts.length} alert(s)`;
   }
 
   document.getElementById('btnTryFetch').onclick = () => tryFetch().catch(e => alert(e.message));
@@ -301,14 +400,18 @@
     document.getElementById('kpiHigh').textContent = '—';
     document.getElementById('kpiMed').textContent = '—';
     document.getElementById('lastUpdated').textContent = '';
+    const st = document.getElementById('statusText');
+    if (st) st.textContent = 'Cleared (UI only)';
   };
 
   // Auto-load on open.
   tryFetch().catch(e => {
     document.querySelector('#alertsTable tbody').innerHTML = `
-      <tr><td colspan="5"><div class="empty">No output loaded yet. If alerts exist, click Refresh.</div></td></tr>
+      <tr><td colspan="7"><div class="empty">No output loaded yet. If alerts exist, click Refresh.</div></td></tr>
     `;
     document.getElementById('selectedMeta').textContent = 'Waiting for alerts output.';
+    const st = document.getElementById('statusText');
+    if (st) st.textContent = 'Waiting for output…';
   });
 </script>
 </body>
