@@ -53,6 +53,18 @@ Each alert includes two human-readable explanations:
 - `reason_short`: short tags (example: `After-hours + sudo + large download`)
 - `reason`: detailed explanation (threshold exceeded + main drivers + top event)
 
+## Examples of low-level threats (early warnings)
+
+These are **low severity** behaviors that may be benign, but are useful as early indicators for investigation:
+
+- **After-hours access with normal actions**: successful logins or file views outside a user’s typical hours (tag: `after_hours`).
+- **Many failures / password guessing**: repeated failed authentication attempts before a successful login (tag: `many_failures`).
+- **Unusual resource access (small volume)**: accessing a new/uncommon file path or application resource, even if the bytes are small (tag: `rare_resource`).
+- **First-time sudo without major impact**: a privileged command seen rarely for that user/role (tag: `sudo` / `privileged`) but without obvious data movement.
+- **Access pattern drift**: a user’s activity time-of-day shifts consistently (e.g., earlier/later than usual), which can indicate account sharing or compromised credentials.
+
+In the demo output, these typically appear as alerts with `level: low` and lower priority, but still include explainable drivers and the top event that triggered the score.
+
 ## What This Repo Contains
 - `itds/` Implementation modules (collector, parser, normalization, LSTM-AE scoring, alerts)
 - `configs/` Runtime configuration (sources, thresholds, weights)
