@@ -490,6 +490,7 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
 
     # Track per-user novelty across sequences for simple "new resource" warnings.
     seen_resources_by_user: dict[str, set[str]] = {}
+    seen_ips_by_user: dict[str, set[str]] = {}
 
     alerts: list[dict[str, Any]] = []
 
@@ -549,6 +550,18 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             categories.append("sudo")
             categories.append("privileged")
 
+        # Admin/API access
+        if any(
+            str(ev.get("event_type") or "").lower() == "app_access"
+            and (
+                str(ev.get("resource") or "").lower().startswith("/api/admin")
+                or "/api/admin" in str(ev.get("resource") or "").lower()
+                or "admin/settings" in str(ev.get("resource") or "").lower()
+            )
+            for ev in seq_events
+        ):
+            categories.append("admin_api")
+
         mb = float(cfg.get("rules", {}).get("large_data_threshold_mb", 200))
         byte_threshold = int(mb * 1024 * 1024)
         if any(str(ev.get("action") or "").lower() == "download" and isinstance(ev.get("bytes"), int) and int(ev.get("bytes")) >= byte_threshold for ev in seq_events):
@@ -559,6 +572,34 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             categories.append("many_failures")
         elif fails >= 1:
             categories.append("some_failures")
+
+        # Deny burst (403-style app denies clustered in a window)
+        deny_burst_n = 0
+        for ev in seq_events:
+            if str(ev.get("event_type") or "").lower() != "app_access":
+                continue
+            extra = ev.get("extra") or {}
+            http_status = str(extra.get("http_status") if isinstance(extra, dict) else "")
+            if str(ev.get("status") or "").lower() in {"fail", "failed"} and http_status.startswith("403"):
+                deny_burst_n += 1
+        if deny_burst_n >= 3:
+            categories.append("deny_burst")
+
+        # New IP address for the user (within this run)
+        seen_ips = seen_ips_by_user.setdefault(user, set())
+        ip_novel = False
+        for ev in seq_events:
+            ip = str(ev.get("ip") or "").strip()
+            if not ip:
+                continue
+            if ip not in seen_ips:
+                ip_novel = True
+        if ip_novel:
+            categories.append("new_ip")
+        for ev in seq_events:
+            ip = str(ev.get("ip") or "").strip()
+            if ip:
+                seen_ips.add(ip)
 
         # Novel resource access (per user, within this run)
         seen_res = seen_resources_by_user.setdefault(user, set())
@@ -688,6 +729,7 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             # Sudo / privilege escalation signals
             if any(str(ev.get("event_type") or "").lower() == "sudo" for ev in seq_events_):
                 tags.append("sudo")
+                tags.append("privileged")
 
             # Large download
             mb = float(rules.get("large_data_threshold_mb", 200)) if isinstance(rules, dict) else 200.0
@@ -739,6 +781,12 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             reason_short_tags.append("new resource")
         if "some_failures" in categories and "many_failures" not in categories:
             reason_short_tags.append("few failures")
+        if "new_ip" in categories:
+            reason_short_tags.append("new IP")
+        if "admin_api" in categories:
+            reason_short_tags.append("admin API")
+        if "deny_burst" in categories:
+            reason_short_tags.append("deny burst")
         reason_short = " + ".join(reason_short_tags) if reason_short_tags else "Unusual behavior"
 
         if anomaly_level in {"medium", "high"}:

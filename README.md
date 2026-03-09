@@ -57,11 +57,16 @@ Each alert includes two human-readable explanations:
 
 These are **low severity** behaviors that may be benign, but are useful as early indicators for investigation:
 
-- **After-hours access with normal actions**: successful logins or file views outside a user’s typical hours (tag: `after_hours`).
-- **Many failures / password guessing**: repeated failed authentication attempts before a successful login (tag: `many_failures`).
-- **Unusual resource access (small volume)**: accessing a new/uncommon file path or application resource, even if the bytes are small (tag: `rare_resource`).
-- **First-time sudo without major impact**: a privileged command seen rarely for that user/role (tag: `sudo` / `privileged`) but without obvious data movement.
-- **Access pattern drift**: a user’s activity time-of-day shifts consistently (e.g., earlier/later than usual), which can indicate account sharing or compromised credentials.
+- **After-hours access**: activity outside configured working hours (tag shown as `After-hours`).
+- **Many failures / password guessing**: repeated failed logins or denied access attempts (tag: `many failures`).
+- **Deny burst (403 burst)**: multiple denied app-access events clustered in a short window (tag: `deny burst`).
+- **Few failures**: a small number of failures that may indicate probing (tag: `few failures`).
+- **New resource**: first-time access to a resource path for that user during the run (tag: `new resource`).
+- **New IP**: user activity from a previously unseen IP (within the run) (tag: `new IP`).
+- **Admin API access**: access to admin-like endpoints/resources (tag: `admin API`).
+- **Sudo / privilege escalation**: privileged command execution (tag: `sudo`).
+- **Privileged activity**: explicit privileged actions (tag: `privileged`).
+- **Large download**: large data download beyond configured threshold (tag: `large download`).
 
 In the demo output, these typically appear as alerts with `level: low` and lower priority, but still include explainable drivers and the top event that triggered the score.
 

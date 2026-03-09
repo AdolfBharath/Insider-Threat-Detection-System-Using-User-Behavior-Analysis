@@ -103,6 +103,9 @@ risk:
     many_failures: 6
     some_failures: 2
     novel_resource: 4
+    new_ip: 6
+    admin_api: 5
+    deny_burst: 6
 
 roles:
   # Improvement #1: role-based behavioral modeling
