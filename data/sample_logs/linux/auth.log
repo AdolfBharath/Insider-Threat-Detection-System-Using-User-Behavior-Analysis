@@ -11,3 +11,8 @@ Jan 27 02:11:10 host1 sudo:    charlie : TTY=pts/2 ; PWD=/home/charlie ; USER=ro
 Jan 27 14:02:11 host1 sshd[3011]: Accepted password for diana from 10.0.0.88 port 50011 ssh2
 Jan 27 14:10:12 host1 sshd[3012]: Failed password for invalid user diana from 10.0.0.88 port 50012 ssh2
 Jan 27 14:10:15 host1 sshd[3012]: Failed password for invalid user diana from 10.0.0.88 port 50012 ssh2
+
+Jan 27 20:30:01 host1 sshd[4001]: Accepted password for bob from 10.0.0.20 port 52001 ssh2
+Jan 27 20:30:20 host1 sshd[4002]: Failed password for bob from 10.0.0.20 port 52002 ssh2
+Jan 27 20:30:22 host1 sshd[4002]: Failed password for bob from 10.0.0.20 port 52002 ssh2
+Jan 27 20:30:40 host1 sshd[4003]: Accepted password for bob from 10.0.0.20 port 52003 ssh2

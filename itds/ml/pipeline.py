@@ -483,6 +483,14 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
     # Maintain per-user risk state
     state: dict[str, dict[str, Any]] = {}
 
+    # Low-level (early warning) alerting
+    risk_cfg = cfg.get("risk", {}) if isinstance(cfg.get("risk", {}), dict) else {}
+    emit_low_alerts = bool(risk_cfg.get("emit_low_alerts", False))
+    risk_low = float(risk_cfg.get("threshold_low", 15))
+
+    # Track per-user novelty across sequences for simple "new resource" warnings.
+    seen_resources_by_user: dict[str, set[str]] = {}
+
     alerts: list[dict[str, Any]] = []
 
     for i, meta in enumerate(batch.meta):
@@ -549,6 +557,24 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
         fails = sum(1 for ev in seq_events if str(ev.get("status") or "").lower() in {"fail", "failed"})
         if fails >= 3:
             categories.append("many_failures")
+        elif fails >= 1:
+            categories.append("some_failures")
+
+        # Novel resource access (per user, within this run)
+        seen_res = seen_resources_by_user.setdefault(user, set())
+        novel = False
+        for ev in seq_events:
+            r = str(ev.get("resource") or "").strip()
+            if not r:
+                continue
+            if r not in seen_res:
+                novel = True
+        if novel:
+            categories.append("novel_resource")
+        for ev in seq_events:
+            r = str(ev.get("resource") or "").strip()
+            if r:
+                seen_res.add(r)
 
         # Severity scaling (relative to threshold)
         threshold_used = t_high if anomaly_level == "high" else (t_medium if anomaly_level == "medium" else max(t_medium, t_high, 1e-9))
@@ -583,7 +609,11 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
         if level == "low":
             # Update adaptive stats only when sequence looks normal-ish.
             _update_adaptive_stats(cfg, role, e, t_medium, adaptive_stats)
-            continue
+            # Optional: still emit low-level alerts as early warnings.
+            if not emit_low_alerts:
+                continue
+            if risk < risk_low and not categories:
+                continue
 
         # Explainability (feature + timestep contributions)
         feat_err = np.mean(diff2[i], axis=0)  # (d,)
@@ -691,6 +721,10 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
         elif anomaly_level == "medium":
             threshold_used = t_medium
             threshold_name = "t_medium"
+        else:
+            # Low anomaly-level: report relative to t_medium for clarity (if available)
+            threshold_used = t_medium if float(t_medium) > 0 else float(t_high)
+            threshold_name = "t_medium" if float(t_medium) > 0 else "t_high"
 
         top_feature_text = ", ".join(_friendly_feature_name(x["feature"]) for x in top_features[:top_k])
         top_event_text = ""
@@ -700,12 +734,29 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             top_event_text = f"Top event: {ev0.get('action')} {r if r else ''} at {ev0.get('ts')}".strip()
 
         reason_short_tags = _make_reason_tags(cfg, seq_events, end_ts)
+        # Extend tags for newer low-level categories (keeps output explainable)
+        if "novel_resource" in categories:
+            reason_short_tags.append("new resource")
+        if "some_failures" in categories and "many_failures" not in categories:
+            reason_short_tags.append("few failures")
         reason_short = " + ".join(reason_short_tags) if reason_short_tags else "Unusual behavior"
 
-        reason = (
-            f"{reason_short}. Reconstruction error {e:.4f} exceeded {threshold_name}={threshold_used:.4f}; "
-            f"drivers: {top_feature_text}. {top_event_text}"
-        ).strip()
+        if anomaly_level in {"medium", "high"}:
+            reason = (
+                f"{reason_short}. Reconstruction error {e:.4f} exceeded {threshold_name}={threshold_used:.4f}; "
+                f"drivers: {top_feature_text}. {top_event_text}"
+            ).strip()
+        else:
+            # Low anomaly-level: avoid misleading 'exceeded =0.0000' messaging.
+            if float(threshold_used) > 0:
+                reason = (
+                    f"{reason_short}. Reconstruction error {e:.4f} is below {threshold_name}={threshold_used:.4f}; "
+                    f"drivers: {top_feature_text}. {top_event_text}"
+                ).strip()
+            else:
+                reason = (
+                    f"{reason_short}. Reconstruction error {e:.4f}; drivers: {top_feature_text}. {top_event_text}"
+                ).strip()
 
         alerts.append(
             {
@@ -725,7 +776,13 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
                 },
                 # Improvement #7: prioritization signal for sorting/triage
                 "priority": {
-                    "score": round(float(0.7 * risk + 0.3 * severity_points + (10.0 if "sudo" in reason_short_tags else 0.0) + (10.0 if "large download" in reason_short_tags else 0.0)), 2),
+                    "score": round(
+                        float(
+                            (0.7 * risk + 0.3 * severity_points + (10.0 if "sudo" in reason_short_tags else 0.0) + (10.0 if "large download" in reason_short_tags else 0.0))
+                            * (0.6 if level == "low" else 1.0)
+                        ),
+                        2,
+                    ),
                     "critical": [t for t in ("sudo", "large download") if t in reason_short_tags],
                 },
                 "explanations": [

@@ -89,6 +89,8 @@ anomaly:
 risk:
   decay_half_life_hours: 24
   frequency_window_hours: 6
+  emit_low_alerts: true
+  threshold_low: 15
   threshold_high: 70
   threshold_medium: 45
 
@@ -99,6 +101,8 @@ risk:
     privileged: 8
     large_download: 15
     many_failures: 6
+    some_failures: 2
+    novel_resource: 4
 
 roles:
   # Improvement #1: role-based behavioral modeling

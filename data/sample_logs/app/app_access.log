@@ -20,3 +20,15 @@
 2026-01-27T14:22:14Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
 2026-01-27T14:22:16Z user=diana action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.88 status=403
 2026-01-27T21:05:10Z user=diana action=download resource=/db_exports/customers.csv bytes=314572800 ip=10.0.0.88 status=200
+
+2026-01-27T20:35:00Z user=bob action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.20 status=403
+2026-01-27T20:35:10Z user=bob action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.20 status=200
+2026-01-27T20:36:00Z user=bob action=view resource=/api/admin/settings bytes=512 ip=10.0.0.20 status=200
+2026-01-27T20:36:40Z user=bob action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.20 status=200
+2026-01-27T20:37:00Z user=bob action=download resource=/engineering/source.zip bytes=52428800 ip=10.0.0.20 status=200
+
+2026-01-27T07:05:00Z user=eve action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.30 status=200
+2026-01-27T07:05:20Z user=eve action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.30 status=403
+2026-01-27T07:05:40Z user=eve action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.30 status=200
+2026-01-27T07:06:10Z user=eve action=view resource=/api/profile bytes=512 ip=10.0.0.30 status=200
+2026-01-27T07:06:40Z user=eve action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.30 status=200
