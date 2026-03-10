@@ -23,13 +23,41 @@
 
 2026-01-27T20:35:00Z user=bob action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.20 status=403
 2026-01-27T20:35:10Z user=bob action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.20 status=200
-2026-01-27T20:36:00Z user=bob action=view resource=/api/admin/settings bytes=512 ip=10.0.0.20 status=200
+2026-01-27T20:36:00Z user=bob action=view resource=/api/profile bytes=512 ip=10.0.0.20 status=200
 2026-01-27T20:36:40Z user=bob action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.20 status=200
 2026-01-27T20:37:00Z user=bob action=download resource=/engineering/source.zip bytes=52428800 ip=10.0.0.20 status=200
-2026-01-27T20:37:20Z user=bob action=view resource=/engineering/source.zip bytes=1024 ip=10.0.0.99 status=200
+2026-01-27T20:37:20Z user=bob action=view resource=/engineering/source.zip bytes=1024 ip=10.0.0.20 status=200
+
+2026-01-27T14:25:00Z user=diana action=view resource=/api/admin/settings bytes=512 ip=10.0.0.88 status=200
 
 2026-01-27T07:05:00Z user=eve action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.30 status=200
 2026-01-27T07:05:20Z user=eve action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.30 status=403
 2026-01-27T07:05:40Z user=eve action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.30 status=200
 2026-01-27T07:06:10Z user=eve action=view resource=/api/profile bytes=512 ip=10.0.0.30 status=200
 2026-01-27T07:06:40Z user=eve action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.30 status=200
+
+2026-01-27T12:10:00Z user=frank action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.40 status=200
+2026-01-27T12:10:30Z user=frank action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.40 status=200
+2026-01-27T12:11:00Z user=frank action=download resource=/db_exports/customers.csv bytes=314572800 ip=10.0.0.40 status=200
+2026-01-27T12:11:30Z user=frank action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.40 status=200
+2026-01-27T12:12:00Z user=frank action=view resource=/reports/finance_q4.pdf bytes=10485760 ip=10.0.0.40 status=200
+
+2026-01-27T13:00:00Z user=grace action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.41 status=200
+2026-01-27T13:00:20Z user=grace action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.41 status=200
+2026-01-27T13:00:40Z user=grace action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.41 status=200
+2026-01-27T13:01:00Z user=grace action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.41 status=200
+2026-01-27T13:01:20Z user=grace action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.41 status=200
+2026-01-27T13:01:40Z user=grace action=view resource=/finance/salaries.xlsx bytes=409600 ip=10.0.0.41 status=200
+
+2026-01-27T16:30:00Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.42 status=200
+2026-01-27T16:30:20Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.42 status=200
+2026-01-27T16:30:40Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.42 status=200
+2026-01-27T16:31:00Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.42 status=200
+2026-01-27T16:31:20Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.42 status=200
+2026-01-27T16:31:40Z user=heidi action=view resource=/engineering/roadmap.docx bytes=802341 ip=10.0.0.99 status=200
+
+2026-01-27T15:10:00Z user=ivan action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.43 status=403
+2026-01-27T15:10:02Z user=ivan action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.43 status=403
+2026-01-27T15:10:04Z user=ivan action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.43 status=403
+2026-01-27T15:10:10Z user=ivan action=view resource=/finance/budget.xlsx bytes=204800 ip=10.0.0.43 status=200
+2026-01-27T15:10:20Z user=ivan action=view resource=/hr/policies.pdf bytes=120032 ip=10.0.0.43 status=200

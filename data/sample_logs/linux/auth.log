@@ -16,3 +16,9 @@ Jan 27 20:30:01 host1 sshd[4001]: Accepted password for bob from 10.0.0.20 port 
 Jan 27 20:30:20 host1 sshd[4002]: Failed password for bob from 10.0.0.20 port 52002 ssh2
 Jan 27 20:30:22 host1 sshd[4002]: Failed password for bob from 10.0.0.20 port 52002 ssh2
 Jan 27 20:30:40 host1 sshd[4003]: Accepted password for bob from 10.0.0.20 port 52003 ssh2
+
+Jan 27 10:40:01 host1 sshd[5001]: Accepted password for judy from 10.0.0.55 port 53001 ssh2
+Jan 27 10:40:10 host1 sudo:    judy : TTY=pts/3 ; PWD=/home/judy ; USER=root ; COMMAND=/usr/bin/id
+Jan 27 10:40:20 host1 sudo:    judy : TTY=pts/3 ; PWD=/home/judy ; USER=root ; COMMAND=/usr/bin/cat /etc/shadow
+Jan 27 10:40:30 host1 sudo:    judy : TTY=pts/3 ; PWD=/home/judy ; USER=root ; COMMAND=/usr/sbin/usermod -aG sudo tempuser
+Jan 27 10:40:40 host1 sudo:    judy : TTY=pts/3 ; PWD=/home/judy ; USER=root ; COMMAND=/usr/bin/passwd tempuser
