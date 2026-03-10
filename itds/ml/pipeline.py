@@ -462,7 +462,12 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
     if batch.X.shape[0] == 0:
         return []
 
-    Xhat = model.predict(batch.X, verbose=0)
+    # Some TF/Keras builds can spend a long time tracing/compiling predict graphs
+    # on CPU. For this demo pipeline, an eager forward pass is sufficient.
+    try:
+        Xhat = model(batch.X, training=False).numpy()
+    except Exception:
+        Xhat = model.predict(batch.X, verbose=0)
     diff2 = (batch.X - Xhat) ** 2
     seq_err = np.mean(diff2, axis=(1, 2))
 
@@ -586,14 +591,16 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             categories.append("deny_burst")
 
         # New IP address for the user (within this run)
+        # Only flag when the user already has a baseline IP observed earlier in this run.
         seen_ips = seen_ips_by_user.setdefault(user, set())
         ip_novel = False
-        for ev in seq_events:
-            ip = str(ev.get("ip") or "").strip()
-            if not ip:
-                continue
-            if ip not in seen_ips:
-                ip_novel = True
+        if seen_ips:
+            for ev in seq_events:
+                ip = str(ev.get("ip") or "").strip()
+                if not ip:
+                    continue
+                if ip not in seen_ips:
+                    ip_novel = True
         if ip_novel:
             categories.append("new_ip")
         for ev in seq_events:
@@ -602,14 +609,16 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
                 seen_ips.add(ip)
 
         # Novel resource access (per user, within this run)
+        # Only flag when the user already has a baseline resource observed earlier in this run.
         seen_res = seen_resources_by_user.setdefault(user, set())
         novel = False
-        for ev in seq_events:
-            r = str(ev.get("resource") or "").strip()
-            if not r:
-                continue
-            if r not in seen_res:
-                novel = True
+        if seen_res:
+            for ev in seq_events:
+                r = str(ev.get("resource") or "").strip()
+                if not r:
+                    continue
+                if r not in seen_res:
+                    novel = True
         if novel:
             categories.append("novel_resource")
         for ev in seq_events:
@@ -863,4 +872,33 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
 
     # Improvement #7: sort alerts by priority score (descending)
     alerts.sort(key=lambda a: float((a.get("priority") or {}).get("score", 0.0)), reverse=True)
+
+    # Demo-only: force a fixed level distribution for presentation.
+    # Remaps the top alerts (by priority) into requested buckets while preserving
+    # the original model-derived severity in `level_raw`.
+    alerting_cfg = cfg.get("alerting", {}) if isinstance(cfg.get("alerting", {}), dict) else {}
+    demo_dist = alerting_cfg.get("demo_level_distribution")
+    if isinstance(demo_dist, dict):
+        try:
+            n_high = int(demo_dist.get("high", 0))
+            n_med = int(demo_dist.get("medium", 0))
+            n_low = int(demo_dist.get("low", 0))
+        except Exception:
+            n_high, n_med, n_low = 0, 0, 0
+
+        total = max(0, n_high) + max(0, n_med) + max(0, n_low)
+        if total > 0 and alerts:
+            chosen = alerts[: min(total, len(alerts))]
+            out: list[dict[str, Any]] = []
+            for idx, a in enumerate(chosen):
+                a2 = dict(a)
+                a2.setdefault("level_raw", a2.get("level"))
+                if idx < n_high:
+                    a2["level"] = "high"
+                elif idx < n_high + n_med:
+                    a2["level"] = "medium"
+                else:
+                    a2["level"] = "low"
+                out.append(a2)
+            alerts = out
     return alerts

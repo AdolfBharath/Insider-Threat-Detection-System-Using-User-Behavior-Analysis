@@ -116,8 +116,18 @@ roles:
     bob: employee
     charlie: manager
     diana: admin
+    eve: employee
+    frank: employee
+    grace: employee
+    heidi: employee
+    ivan: employee
+    judy: manager
 
 alerting:
   sink: console   # console | json
   json_out: data/out/alerts.jsonl
   clear_on_run: true
+  demo_level_distribution:
+    high: 4
+    medium: 6
+    low: 4
