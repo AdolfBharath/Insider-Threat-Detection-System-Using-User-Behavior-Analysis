@@ -57,7 +57,9 @@ def get_artifacts(cfg: dict) -> ModelArtifacts:
     ml_cfg = cfg.get("lstm_ae", {})
     seq_len = int(ml_cfg.get("seq_len", 10))
     return ModelArtifacts(
-        model_dir=out_dir / f"lstm_ae_L{seq_len}",
+        # Keras 3 does not support `load_model()` from a TensorFlow SavedModel directory.
+        # Use the native Keras v3 format instead.
+        model_dir=out_dir / f"lstm_ae_L{seq_len}.keras",
         spec_path=out_dir / "feature_spec.json",
         thresholds_path=out_dir / f"thresholds_L{seq_len}.json",
         adaptive_stats_path=out_dir / f"adaptive_stats_L{seq_len}.json",
@@ -262,96 +264,122 @@ def ensure_trained(cfg: dict, events: list[dict[str, Any]]) -> tuple[Any, Featur
             "TensorFlow is required for LSTM Autoencoder mode. Install: pip install tensorflow"
         ) from e
 
-    def _saved_model_present(model_dir: Path) -> bool:
-        # `model.save(dir)` writes a SavedModel with `saved_model.pb`.
-        # Some TF versions also include `keras_metadata.pb`, but it's not guaranteed.
-        return model_dir.exists() and (model_dir / "saved_model.pb").exists()
+    def _keras_model_present(model_path: Path) -> bool:
+        return model_path.exists() and model_path.is_file() and model_path.suffix.lower() in {".keras", ".h5"}
 
-    if _saved_model_present(artifacts.model_dir) and artifacts.spec_path.exists() and artifacts.thresholds_path.exists():
-        model = tf.keras.models.load_model(str(artifacts.model_dir))
-        spec = load_feature_spec(str(artifacts.spec_path))
-        thresholds = _load_thresholds(artifacts.thresholds_path) or {"t_medium": 0.0, "t_high": 0.0}
+    def _legacy_saved_model_present(model_dir: Path) -> bool:
+        # Legacy TF SavedModel directory produced by `model.save(dir)`.
+        return model_dir.exists() and model_dir.is_dir() and (model_dir / "saved_model.pb").exists()
 
-        # Improvement #4: incremental learning metadata (periodic retraining).
-        meta = _load_json(artifacts.train_meta_path) or {"run_count": 0, "last_trained_ts": None}
-        meta["run_count"] = int(meta.get("run_count", 0)) + 1
-        _save_json(artifacts.train_meta_path, meta)
-
-        # Improvement #5 (robustness): if the feature spec changed, the saved model may be incompatible.
-        # Detect mismatch and force retrain.
-        need_retrain = False
-        if int(getattr(spec, "version", 1)) < 2 or not getattr(spec, "role_vocab", None):
-            need_retrain = True
-        else:
+    if _keras_model_present(artifacts.model_dir) and artifacts.spec_path.exists() and artifacts.thresholds_path.exists():
+        try:
+            model = tf.keras.models.load_model(str(artifacts.model_dir))
+            spec = load_feature_spec(str(artifacts.spec_path))
+            thresholds = _load_thresholds(artifacts.thresholds_path) or {"t_medium": 0.0, "t_high": 0.0}
+        except Exception:
+            # Model serialization mismatch (e.g., Keras version change). Retrain from scratch.
             try:
-                model_dim = int(model.input_shape[-1])
-                if events:
-                    vec_dim = int(EventVectorizer(cfg, spec).vectorize(events[0]).shape[0])
-                    if vec_dim != model_dim:
-                        need_retrain = True
+                artifacts.model_dir.unlink()
             except Exception:
+                pass
+            try:
+                artifacts.spec_path.unlink()
+            except Exception:
+                pass
+            try:
+                artifacts.thresholds_path.unlink()
+            except Exception:
+                pass
+            try:
+                artifacts.adaptive_stats_path.unlink()
+            except Exception:
+                pass
+        else:
+
+            # Improvement #4: incremental learning metadata (periodic retraining).
+            meta = _load_json(artifacts.train_meta_path) or {"run_count": 0, "last_trained_ts": None}
+            meta["run_count"] = int(meta.get("run_count", 0)) + 1
+            _save_json(artifacts.train_meta_path, meta)
+
+            # Improvement #5 (robustness): if the feature spec changed, the saved model may be incompatible.
+            # Detect mismatch and force retrain.
+            need_retrain = False
+            if int(getattr(spec, "version", 1)) < 2 or not getattr(spec, "role_vocab", None):
                 need_retrain = True
+            else:
+                try:
+                    model_dim = int(model.input_shape[-1])
+                    if events:
+                        vec_dim = int(EventVectorizer(cfg, spec).vectorize(events[0]).shape[0])
+                        if vec_dim != model_dim:
+                            need_retrain = True
+                except Exception:
+                    need_retrain = True
 
-        if not need_retrain:
-            # If thresholds were written during a low-data fallback run (0.0), recompute
-            # them from current data so scoring can produce alerts.
-            if float(thresholds.get("t_medium", 0.0)) == 0.0 and float(thresholds.get("t_high", 0.0)) == 0.0:
-                ml_cfg = cfg.get("lstm_ae", {})
-                seq_len = int(ml_cfg.get("seq_len", 10))
-                stride = int(ml_cfg.get("stride", 1))
-
-                vectorizer = EventVectorizer(cfg, spec)
-                vectors = [vectorizer.vectorize(e) for e in events]
-                batch = build_user_sequences(events, vectors, seq_len=seq_len, stride=stride)
-
-                if batch.X.shape[0] >= 4:
-                    Xhat_all = model.predict(batch.X, verbose=0)
-                    err_all = np.mean((batch.X - Xhat_all) ** 2, axis=(1, 2))
-                    t_med_p = float(ml_cfg.get("t_medium_percentile", 95))
-                    t_hi_p = float(ml_cfg.get("t_high_percentile", 99))
-                    t_medium = _percentile(err_all, t_med_p)
-                    t_high = _percentile(err_all, t_hi_p)
-                    _save_thresholds(artifacts.thresholds_path, t_medium=t_medium, t_high=t_high)
-                    thresholds = {"t_medium": float(t_medium), "t_high": float(t_high)}
-
-            # Optional retraining hook (periodic)
-            retrain_cfg = (
-                cfg.get("lstm_ae", {}).get("retrain", {})
-                if isinstance(cfg.get("lstm_ae", {}).get("retrain", {}), dict)
-                else {}
-            )
-            if bool(retrain_cfg.get("enabled", False)):
-                every = int(retrain_cfg.get("every_runs", 10))
-                if every > 0 and int(meta.get("run_count", 0)) % every == 0:
-                    vectors = [EventVectorizer(cfg, spec).vectorize(e) for e in events]
+            if not need_retrain:
+                # If thresholds were written during a low-data fallback run (0.0), recompute
+                # them from current data so scoring can produce alerts.
+                if float(thresholds.get("t_medium", 0.0)) == 0.0 and float(thresholds.get("t_high", 0.0)) == 0.0:
                     ml_cfg = cfg.get("lstm_ae", {})
                     seq_len = int(ml_cfg.get("seq_len", 10))
                     stride = int(ml_cfg.get("stride", 1))
-                    batch = build_user_sequences(events, vectors, seq_len=seq_len, stride=stride)
-                    min_seqs = int(retrain_cfg.get("min_sequences", 50))
-                    if batch.X.shape[0] >= min_seqs:
-                        epochs = int(retrain_cfg.get("epochs", 3))
-                        bs = int(retrain_cfg.get("batch_size", 64))
-                        model.fit(batch.X, batch.X, epochs=epochs, batch_size=bs, verbose=0)
-                        model.save(str(artifacts.model_dir))
 
-                        # refresh base thresholds after retrain
-                        Xhat = model.predict(batch.X, verbose=0)
-                        err = np.mean((batch.X - Xhat) ** 2, axis=(1, 2))
+                    vectorizer = EventVectorizer(cfg, spec)
+                    vectors = [vectorizer.vectorize(e) for e in events]
+                    batch = build_user_sequences(events, vectors, seq_len=seq_len, stride=stride)
+
+                    if batch.X.shape[0] >= 4:
+                        Xhat_all = model.predict(batch.X, verbose=0)
+                        err_all = np.mean((batch.X - Xhat_all) ** 2, axis=(1, 2))
                         t_med_p = float(ml_cfg.get("t_medium_percentile", 95))
                         t_hi_p = float(ml_cfg.get("t_high_percentile", 99))
-                        t_medium = _percentile(err, t_med_p)
-                        t_high = _percentile(err, t_hi_p)
+                        t_medium = _percentile(err_all, t_med_p)
+                        t_high = _percentile(err_all, t_hi_p)
                         _save_thresholds(artifacts.thresholds_path, t_medium=t_medium, t_high=t_high)
                         thresholds = {"t_medium": float(t_medium), "t_high": float(t_high)}
-                        meta["last_trained_ts"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                        _save_json(artifacts.train_meta_path, meta)
 
-            return model, spec, thresholds
+                # Optional retraining hook (periodic)
+                retrain_cfg = (
+                    cfg.get("lstm_ae", {}).get("retrain", {})
+                    if isinstance(cfg.get("lstm_ae", {}).get("retrain", {}), dict)
+                    else {}
+                )
+                if bool(retrain_cfg.get("enabled", False)):
+                    every = int(retrain_cfg.get("every_runs", 10))
+                    if every > 0 and int(meta.get("run_count", 0)) % every == 0:
+                        vectors = [EventVectorizer(cfg, spec).vectorize(e) for e in events]
+                        ml_cfg = cfg.get("lstm_ae", {})
+                        seq_len = int(ml_cfg.get("seq_len", 10))
+                        stride = int(ml_cfg.get("stride", 1))
+                        batch = build_user_sequences(events, vectors, seq_len=seq_len, stride=stride)
+                        min_seqs = int(retrain_cfg.get("min_sequences", 50))
+                        if batch.X.shape[0] >= min_seqs:
+                            epochs = int(retrain_cfg.get("epochs", 3))
+                            bs = int(retrain_cfg.get("batch_size", 64))
+                            model.fit(batch.X, batch.X, epochs=epochs, batch_size=bs, verbose=0)
+                            model.save(str(artifacts.model_dir))
+
+                            # refresh base thresholds after retrain
+                            Xhat = model.predict(batch.X, verbose=0)
+                            err = np.mean((batch.X - Xhat) ** 2, axis=(1, 2))
+                            t_med_p = float(ml_cfg.get("t_medium_percentile", 95))
+                            t_hi_p = float(ml_cfg.get("t_high_percentile", 99))
+                            t_medium = _percentile(err, t_med_p)
+                            t_high = _percentile(err, t_hi_p)
+                            _save_thresholds(artifacts.thresholds_path, t_medium=t_medium, t_high=t_high)
+                            thresholds = {"t_medium": float(t_medium), "t_high": float(t_high)}
+                            meta["last_trained_ts"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                            _save_json(artifacts.train_meta_path, meta)
+
+                return model, spec, thresholds
 
         # Retrain path: feature spec/model incompatible.
         try:
-            shutil.rmtree(artifacts.model_dir)
+            if artifacts.model_dir.exists():
+                if artifacts.model_dir.is_dir():
+                    shutil.rmtree(artifacts.model_dir)
+                else:
+                    artifacts.model_dir.unlink()
         except Exception:
             pass
 
@@ -376,7 +404,7 @@ def ensure_trained(cfg: dict, events: list[dict[str, Any]]) -> tuple[Any, Featur
     if batch.X.shape[0] < 4:
         # Not enough sequences; still create a model artifact so pipeline can run.
         model = build_lstm_autoencoder(seq_len=seq_len, feature_dim=vectors[0].shape[0] if vectors else 1)
-        artifacts.model_dir.mkdir(parents=True, exist_ok=True)
+        artifacts.model_dir.parent.mkdir(parents=True, exist_ok=True)
         model.save(str(artifacts.model_dir))
         _save_thresholds(artifacts.thresholds_path, t_medium=0.0, t_high=0.0)
         _save_json(artifacts.train_meta_path, {"run_count": 1, "last_trained_ts": None})
@@ -415,7 +443,7 @@ def ensure_trained(cfg: dict, events: list[dict[str, Any]]) -> tuple[Any, Featur
     t_medium = _percentile(train_err, t_med_p)
     t_high = _percentile(train_err, t_hi_p)
 
-    artifacts.model_dir.mkdir(parents=True, exist_ok=True)
+    artifacts.model_dir.parent.mkdir(parents=True, exist_ok=True)
     model.save(str(artifacts.model_dir))
     _save_thresholds(artifacts.thresholds_path, t_medium=t_medium, t_high=t_high)
 
@@ -883,12 +911,36 @@ def score_sequences(cfg: dict, events: list[dict[str, Any]]) -> list[dict[str, A
             n_high = int(demo_dist.get("high", 0))
             n_med = int(demo_dist.get("medium", 0))
             n_low = int(demo_dist.get("low", 0))
+            unique_users = bool(demo_dist.get("unique_users", False))
         except Exception:
             n_high, n_med, n_low = 0, 0, 0
+            unique_users = False
 
         total = max(0, n_high) + max(0, n_med) + max(0, n_low)
         if total > 0 and alerts:
-            chosen = alerts[: min(total, len(alerts))]
+            if unique_users:
+                chosen: list[dict[str, Any]] = []
+                seen: set[str] = set()
+                for a in alerts:
+                    u = str(a.get("user") or "unknown")
+                    if u in seen:
+                        continue
+                    seen.add(u)
+                    chosen.append(a)
+                    if len(chosen) >= total:
+                        break
+            else:
+                chosen = alerts[: min(total, len(alerts))]
+
+            if len(chosen) < min(total, len(alerts)):
+                # Not enough unique users; fall back to filling remaining slots.
+                for a in alerts:
+                    if len(chosen) >= min(total, len(alerts)):
+                        break
+                    if a in chosen:
+                        continue
+                    chosen.append(a)
+
             out: list[dict[str, Any]] = []
             for idx, a in enumerate(chosen):
                 a2 = dict(a)

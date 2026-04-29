@@ -122,12 +122,17 @@ roles:
     heidi: employee
     ivan: employee
     judy: manager
+    kate: employee
+    leo: employee
+    mallory: admin
+    nick: manager
 
 alerting:
-  sink: console   # console | json
+  sink: json   # console | json
   json_out: data/out/alerts.jsonl
   clear_on_run: true
   demo_level_distribution:
     high: 4
     medium: 6
     low: 4
+    unique_users: true

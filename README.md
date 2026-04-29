@@ -37,16 +37,16 @@ What you get:
 
 ## View output in a webpage (Dashboard)
 
-Serve the repo locally and the dashboard will auto-load `data/out/alerts.jsonl`:
+Start the dashboard server (supports uploads + background analysis):
 
 ```powershell
-python -m http.server 8000
+python .\web\server.py
 ```
 
 Open:
 - `http://localhost:8000/web/dashboard.html`
 
-Tip: click **Refresh** to reload the latest output.
+Tip: click **Reload Alerts** to refresh the latest output.
 
 ## How to read "Top reason"
 Each alert includes two human-readable explanations:
